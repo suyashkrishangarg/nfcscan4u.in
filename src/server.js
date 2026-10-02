@@ -420,7 +420,8 @@ app.get('/admin', async (req, res) => {
   }
   const cards = await db.getAllCards();
   const message = req.query.msg || null;
-  res.send(views.renderAdminDashboard(cards, config.baseUrl, message));
+  const error = req.query.err || null;
+  res.send(views.renderAdminDashboard(cards, config.baseUrl, message, error));
 });
 
 app.post('/admin/login', (req, res) => {
@@ -610,6 +611,21 @@ app.post('/admin/card/:id/delete', async (req, res) => {
   if (!req.session.isAdmin) return res.status(403).send('Unauthorized');
   await db.deleteCard(req.params.id);
   redirect303(req, res, '/admin?msg=Card+deleted+successfully');
+});
+
+// Bulk wipe: clears every card (and its scan history) in two queries instead of
+// clicking delete once per card. The UI gates this behind a typed confirmation.
+app.post('/admin/cards/delete-all', async (req, res) => {
+  if (!req.session.isAdmin) return res.status(403).send('Unauthorized');
+  try {
+    const { cards, scans } = await db.deleteAllCards();
+    const plural = n => (n === 1 ? '' : 's');
+    const msg = `Deleted all ${cards} card${plural(cards)} and ${scans} scan record${plural(scans)}`;
+    redirect303(req, res, `/admin?msg=${encodeURIComponent(msg)}`);
+  } catch (err) {
+    console.error('Delete-all cards error:', err);
+    redirect303(req, res, `/admin?err=${encodeURIComponent('Failed to delete cards: ' + err.message)}`);
+  }
 });
 
 // Start Server helper

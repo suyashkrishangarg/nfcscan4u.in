@@ -219,6 +219,19 @@ async function deleteCard(id) {
   });
 }
 
+// Wipe the entire card inventory in one shot ("Delete All Cards" in the admin
+// portal). Scan history is cleared first so nothing is orphaned, then the cards
+// themselves. Both statements are single queries so this stays fast even for
+// thousands of rows.
+async function deleteAllCards() {
+  const scans = await db.execute('DELETE FROM scans');
+  const cards = await db.execute('DELETE FROM cards');
+  return {
+    cards: Number(cards.rowsAffected || 0),
+    scans: Number(scans.rowsAffected || 0)
+  };
+}
+
 async function recordScan(card_id, user_agent, referer) {
   try {
     await db.execute({
@@ -309,6 +322,7 @@ module.exports = {
   setCardStatus,
   resetCard,
   deleteCard,
+  deleteAllCards,
   recordScan,
   getAllCards,
   getCardStats,

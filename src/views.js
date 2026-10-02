@@ -621,9 +621,18 @@ function renderAdminDashboard(cards, baseUrl, message = null, error = null) {
 
     <!-- Cards Table -->
     <div class="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
-      <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+      <div class="p-5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
         <h3 class="font-bold text-white text-base">All Physical Cards</h3>
-        <span class="text-xs text-slate-400">${cards.length} cards total</span>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-slate-400">${cards.length} cards total</span>
+          ${cards.length > 0 ? `
+            <button type="button" id="btnDeleteAll"
+              class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-semibold inline-flex items-center gap-1.5 transition">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>Delete All Cards</span>
+            </button>
+          ` : ''}
+        </div>
       </div>
 
       <div class="overflow-x-auto">
@@ -686,6 +695,77 @@ function renderAdminDashboard(cards, baseUrl, message = null, error = null) {
         </table>
       </div>
     </div>
+
+  ${cards.length > 0 ? `
+    <!-- Delete-all confirmation (typed gate: bulk actions are irreversible) -->
+    <div id="deleteAllModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+      <div class="w-full max-w-md bg-slate-900 border border-red-500/30 rounded-3xl p-6 shadow-2xl">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 shrink-0 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+            <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+          </div>
+          <h3 class="text-lg font-bold text-white">Delete all ${cards.length} cards?</h3>
+        </div>
+        <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+          This permanently removes <span class="font-semibold text-slate-300">every card</span> in the database,
+          including their scan history and any claimed profile or destination link. Cards already printed with
+          these IDs will stop working. This cannot be undone.
+        </p>
+        <label for="deleteAllConfirm" class="block text-xs font-semibold text-slate-300 mb-1">
+          Type <span class="font-mono text-red-400">DELETE</span> to confirm
+        </label>
+        <input type="text" id="deleteAllConfirm" autocomplete="off" spellcheck="false" placeholder="DELETE"
+          class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 focus:border-red-500/50 outline-none rounded-xl text-white text-sm font-mono tracking-widest mb-4">
+        <form action="/admin/cards/delete-all" method="POST" id="deleteAllForm" class="flex gap-2">
+          <button type="button" id="deleteAllCancel"
+            class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition">
+            Cancel
+          </button>
+          <button type="submit" id="deleteAllSubmit" disabled
+            class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold shadow-lg shadow-red-600/25 transition inline-flex items-center justify-center gap-2">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+            <span>Delete All</span>
+          </button>
+        </form>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var modal = document.getElementById('deleteAllModal');
+        var open = document.getElementById('btnDeleteAll');
+        var cancel = document.getElementById('deleteAllCancel');
+        var input = document.getElementById('deleteAllConfirm');
+        var submit = document.getElementById('deleteAllSubmit');
+        var form = document.getElementById('deleteAllForm');
+        if (!modal || !open || !form) return;
+
+        function check() {
+          submit.disabled = input.value.trim().toUpperCase() !== 'DELETE';
+        }
+        function show() {
+          input.value = '';
+          check();
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+          input.focus();
+        }
+        function hide() {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+        }
+
+        open.addEventListener('click', show);
+        cancel.addEventListener('click', hide);
+        input.addEventListener('input', check);
+        modal.addEventListener('click', function (e) { if (e.target === modal) hide(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.classList.contains('hidden')) hide(); });
+        form.addEventListener('submit', function () {
+          submit.disabled = true;
+          submit.innerHTML = '<span>Deleting&hellip;</span>';
+        });
+      })();
+    </script>
+    ` : ''}
 
   </main>
   ${getFooter()}`;
