@@ -115,7 +115,7 @@ NFC & DYNAMIC QR CARDS - PRINT & ENCODING INSTRUCTIONS
 // This part is cheap (CSV + instructions + validation) and runs BEFORE the
 // response is piped; call `appendDesignZipCards` after piping so composited
 // images stream out instead of piling up in memory.
-function createDesignZip(cards, design, placement, qrSides, baseUrl = config.baseUrl) {
+function createDesignZip(cards, design, placement, qrSides, baseUrl = config.baseUrl, format = 'images') {
   const archiver = require('archiver'); // lazy: never breaks unrelated cold starts
   const compositor = require('./compositor');
   const archive = archiver('zip', { zlib: { level: 9 } });
@@ -139,28 +139,46 @@ function createDesignZip(cards, design, placement, qrSides, baseUrl = config.bas
     if (!compositor.decodeDataUrl(s.b64)) throw new Error(`Design ${s.key} image is invalid`);
   }
 
-  const instructions = `=====================================================
-NFC & DYNAMIC QR CARDS - PRINT & NFC ENCODING INSTRUCTIONS
-(DESIGN BATCH - artwork with QR codes baked in)
-=====================================================
-
-ZIP CONTENTS:
-  cards/<CARD-ID>_front.* / cards/<CARD-ID>_back.*
+  // Format-specific ZIP layout: the image export ships one file per QR side
+  // (plus shared QR-less sides), the PDF export ships one 2-page PDF per card
+  // (page 1 = front, page 2 = back).
+  const isPdf = format === 'pdf';
+  const contentsBlock = isPdf
+    ? `  cards/<CARD-ID>.pdf
+      One PDF per card: page 1 = front of the card, page 2 = back. The same
+      composited artwork as the image export (unique QR baked in where enabled,
+      plain artwork otherwise). Pages are ISO/IEC 7810 ID-1 size (85.6 x 54 mm).`
+    : `  cards/<CARD-ID>_front.* / cards/<CARD-ID>_back.*
       Print-ready card artwork with that card's unique QR code composited in
       at the placement you configured in the Card Designer. One file per card,
       for each side that has a QR code enabled.
   common_front.* / common_back.*
       Side WITHOUT a QR code (if any). Identical for every card in the batch -
-      print it once for all cards.
-  batch_cards_list.csv
-      Card ID + URL for every card in this batch.
-
-1. PRINTING:
+      print it once for all cards.`;
+  const printBlock = isPdf
+    ? `1. PRINTING:
+   - Pages are ISO/IEC 7810 ID-1 card size (85.6 x 54 mm), artwork edge to
+     edge. Print at actual size; add 3mm bleed as required by your printer.
+   - The file name carries the CARD ID, so each PDF maps to one physical card.
+   - Recommended minimum QR print size: 15mm x 15mm (0.6" x 0.6").`
+    : `1. PRINTING:
    - Print at 300 DPI. Standard card size: 3.375" x 2.125" (85.6 x 54 mm),
      add 3mm bleed as required by your printer.
    - Front and back files share the same CARD ID in their file names, so they
      are easy to pair up during imposition.
-   - Recommended minimum QR print size: 15mm x 15mm (0.6" x 0.6").
+   - Recommended minimum QR print size: 15mm x 15mm (0.6" x 0.6").`;
+
+  const instructions = `=====================================================
+NFC & DYNAMIC QR CARDS - PRINT & NFC ENCODING INSTRUCTIONS
+(DESIGN BATCH - ${isPdf ? 'PDF export, one card per file' : 'artwork with QR codes baked in'})
+=====================================================
+
+ZIP CONTENTS:
+${contentsBlock}
+  batch_cards_list.csv
+      Card ID + URL for every card in this batch.
+
+${printBlock}
 
 2. ENCODING THE NFC CHIP:
    - Target Chips: NTAG213, NTAG215, or NTAG216.
@@ -180,13 +198,54 @@ ZIP CONTENTS:
   return archive;
 }
 
+// Builds the PDF for ONE card: pages in print order (front, then back), using
+// the QR-composited artwork for QR-enabled sides and the plain artwork for
+// the rest. `commonCache` memoises the shared QR-less sides across a batch.
+async function renderDesignCardPdf(card, design, normPlacement, qrSides, baseUrl, commonCache = {}) {
+  const compositor = require('./compositor');
+  const pdfcard = require('./pdfcard');
+  const base = String(baseUrl || '').replace(/\/$/, '');
+
+  const pages = [];
+  for (const side of ['front', 'back']) {
+    const b64 = side === 'front' ? design.frontB64 : design.backB64;
+    if (!b64) continue; // side has no artwork -> no page
+    const src = compositor.decodeDataUrl(b64).buffer;
+    let out;
+    if (qrSides[side]) {
+      out = await compositor.renderCardSide({
+        imageBuffer: src,
+        url: `${base}/c/${card.id}`,
+        placement: normPlacement[side]
+      });
+    } else {
+      if (!commonCache[side]) commonCache[side] = await compositor.passthroughSide(src);
+      out = commonCache[side];
+    }
+    pages.push({ buffer: out.buffer, mime: out.mime });
+  }
+
+  return pdfcard.buildCardPdf(pages, `${card.id} - OpenTap card`);
+}
+
 // Heavy part of the design ZIP: composite each card's QR into the artwork and
 // append the images. Call this AFTER the response has been piped so composited
 // images stream out instead of accumulating in memory.
-async function appendDesignZipCards(archive, cards, design, placement, qrSides, baseUrl = config.baseUrl) {
+async function appendDesignZipCards(archive, cards, design, placement, qrSides, baseUrl = config.baseUrl, format = 'images') {
   const compositor = require('./compositor');
   const base = String(baseUrl || '').replace(/\/$/, '');
   const normPlacement = compositor.normalizePlacement(placement);
+
+  // PDF export: one 2-page PDF per card (page 1 front, page 2 back). The
+  // QR-less artwork is composed once and shared across every card.
+  if (format === 'pdf') {
+    const commonCache = {};
+    for (const card of cards) {
+      const pdfBuf = await renderDesignCardPdf(card, design, normPlacement, qrSides, base, commonCache);
+      archive.append(pdfBuf, { name: `cards/${card.id}.pdf` });
+    }
+    return;
+  }
 
   const sides = [
     { key: 'front', b64: design.frontB64, qr: Boolean(qrSides.front) },
@@ -223,5 +282,6 @@ module.exports = {
   generateQrDataUrl,
   createBatchZip,
   createDesignZip,
+  renderDesignCardPdf,
   appendDesignZipCards
 };

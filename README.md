@@ -41,7 +41,7 @@ Print high-resolution vector QR codes and program NFC chips **once**. Assign, re
   - Upload your front & back card artwork in the Admin Portal.
   - Enable the QR code on one or both sides.
   - Interactive placement: drag the QR on the card, adjust size and rotation (orientation) on a live canvas.
-  - Exports a ZIP of print-ready card images with each card's unique QR composited in, plus CSV + NFC instructions.
+  - Export formats: print-ready card images or one 2-page PDF per card (page 1 = front, page 2 = back), each with the card's unique QR composited in, plus CSV + NFC instructions.
 - **2 Operation Modes per Card**:
   1. **Direct Redirect**: Instantly forwards scanner to any URL (LinkedIn, Instagram, WhatsApp, portfolio, Google Review, Linktree, etc.).
   2. **Digital Business Card**: Displays a mobile contact profile with Avatar, Bio, Social links, and a **"Save to Contacts" (.vcf)** button.
@@ -101,15 +101,16 @@ Besides the QR-only batch, the Admin Portal has a **Card Designer** at `/admin/d
 1. **Upload artwork** — front and/or back of your card (PNG/JPG, auto-downscaled for fast generation).
 2. **Enable the QR code** on one or both sides.
 3. **Place the QR interactively** — drag it on the card preview and adjust *size* and *rotation* (orientation) with sliders; 0°/90°/180° presets included.
-4. **Set the quantity** (and optional code prefix/length) and click **Generate & Download ZIP**.
+4. **Set the quantity** (and optional code prefix/length), pick the export format (image files or one 2-page PDF per card: front on page 1, back on page 2), and click **Generate & Download ZIP**.
 
-The generated ZIP contains:
+The generated ZIP contains (depending on the chosen export format):
 
 ```
-cards/<CARD-ID>_front.*   # full artwork with that card's unique QR baked in
-cards/<CARD-ID>_back.*    # (only for sides that have a QR enabled)
-common_front.*            # sides WITHOUT a QR: identical for every card, print once
+cards/<CARD-ID>_front.*   # image export: full artwork with that card's unique QR baked in
+cards/<CARD-ID>_back.*    # image export (only for sides that have a QR enabled)
+common_front.*            # image export: sides WITHOUT a QR: identical for every card
 common_back.*
+cards/<CARD-ID>.pdf       # PDF export: one 2-page PDF per card - page 1 front, page 2 back
 batch_cards_list.csv      # card IDs + URLs for NFC encoding
 PRINT_AND_NFC_INSTRUCTIONS.txt
 ```

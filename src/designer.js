@@ -227,20 +227,27 @@ function renderDesignerPage(sampleQrDataUrl) {
             class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm">
         </div>
         <div>
-          <button type="button" id="btnGenerate"
-            class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm shadow-lg shadow-indigo-600/25 transition inline-flex items-center justify-center gap-2">
-            <i data-lucide="download" class="w-4 h-4"></i>
-            <span>Generate &amp; Download ZIP</span>
-          </button>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Export format</label>
+          <select id="genFormat"
+            class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm">
+            <option value="pdf" selected>PDF - front + back pages</option>
+            <option value="images">Images (PNG/JPG) per side</option>
+          </select>
         </div>
       </div>
+
+      <button type="button" id="btnGenerate"
+        class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm shadow-lg shadow-indigo-600/25 transition inline-flex items-center justify-center gap-2 mb-4">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Generate &amp; Download ZIP</span>
+      </button>
 
       <div id="qtyWarning" class="hidden p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
         <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 mt-0.5"></i>
         <span>Large batches can exceed the hosted server's time limit. Batches above ~100 cards are safest run locally with <span class="font-mono">npm start</span>.</span>
       </div>
 
-      <p class="text-[11px] text-slate-500 mt-1" id="outputSummary">Output: per-card images with QR baked in + CSV + NFC instructions.</p>
+      <p class="text-[11px] text-slate-500 mt-1" id="outputSummary">Output: PDF export (front + back pages) + CSV + NFC instructions.</p>
     </section>
   </main>
 
@@ -472,6 +479,11 @@ function renderDesignerPage(sampleQrDataUrl) {
 
     function updateOutputSummary() {
       var qty = clamp(parseInt($('genQty').value, 10) || 1, 1, 500);
+      if ($('genFormat').value === 'pdf') {
+        $('outputSummary').textContent = 'Output: ' + qty + ' PDF file(s) - page 1 = front, page 2 = back (QR baked in where enabled) + CSV + NFC instructions.';
+        $('qtyWarning').classList.toggle('hidden', qty <= 100);
+        return;
+      }
       var parts = [];
       if (state.front.img && state.qr.front) parts.push('front');
       if (state.back.img && state.qr.back) parts.push('back');
@@ -711,6 +723,7 @@ function renderDesignerPage(sampleQrDataUrl) {
       persist();
     });
     $('genQty').addEventListener('input', updateOutputSummary);
+    $('genFormat').addEventListener('change', updateOutputSummary);
 
     // ---------- persistence ----------
     function persist() {
@@ -783,6 +796,7 @@ function renderDesignerPage(sampleQrDataUrl) {
             quantity: qty,
             prefix: $('genPrefix').value,
             length: parseInt($('genLength').value, 10),
+            format: $('genFormat').value,
             qr: state.qr,
             placement: { front: state.front.placement, back: state.back.placement }
           })

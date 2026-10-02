@@ -536,7 +536,8 @@ app.post('/admin/generate-design', async (req, res) => {
   if (!req.session.isAdmin) return res.status(403).json({ error: 'Unauthorized' });
 
   try {
-    const { designId, quantity, prefix, length, qr, placement } = req.body || {};
+    const { designId, quantity, prefix, length, qr, placement, format } = req.body || {};
+    const exportFormat = format === 'pdf' ? 'pdf' : 'images';
 
     const design = await db.getDesign(designId);
     if (!design) {
@@ -561,9 +562,12 @@ app.post('/admin/generate-design', async (req, res) => {
     }
     await db.createBatch(newCards);
 
-    // Preflight: render one card BEFORE sending ZIP headers so a broken
-    // compositor/artwork fails as clean JSON instead of a corrupt download.
-    {
+    // Preflight: build the first card's PDF (or render one side image) BEFORE
+    // sending ZIP headers so broken artwork or PDF assembly fails as clean
+    // JSON instead of a corrupt download.
+    if (exportFormat === 'pdf') {
+      await generator.renderDesignCardPdf(newCards[0], design, normPlacement, qrSides, config.baseUrl, {});
+    } else {
       const side = qrSides.front ? 'front' : 'back';
       const art = qrSides.front ? design.frontB64 : design.backB64;
       await compositor.renderCardSide({
@@ -573,7 +577,7 @@ app.post('/admin/generate-design', async (req, res) => {
       });
     }
 
-    const archive = generator.createDesignZip(newCards, design, normPlacement, qrSides, config.baseUrl);
+    const archive = generator.createDesignZip(newCards, design, normPlacement, qrSides, config.baseUrl, exportFormat);
     const filename = `opentap_design_batch_${qty}_cards_${Date.now()}.zip`;
 
     res.setHeader('Content-Type', 'application/zip');
@@ -587,7 +591,7 @@ app.post('/admin/generate-design', async (req, res) => {
     // Pipe FIRST, then append composited images so they stream out instead of
     // piling up in memory for large batches.
     archive.pipe(res);
-    await generator.appendDesignZipCards(archive, newCards, design, normPlacement, qrSides, config.baseUrl);
+    await generator.appendDesignZipCards(archive, newCards, design, normPlacement, qrSides, config.baseUrl, exportFormat);
     await archive.finalize();
   } catch (err) {
     console.error('Design batch generation error:', err);
