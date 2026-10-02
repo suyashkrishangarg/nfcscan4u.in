@@ -9,6 +9,21 @@ const views = require('./views');
 
 const app = express();
 
+// Vercel terminates TLS at its edge, so trust the proxy for req.protocol/host.
+app.set('trust proxy', true);
+
+// Redirect helper.
+// Vercel rewrites *relative* redirects into 307s, which preserve the POST method
+// and turn a normal "POST -> GET" flow into "POST -> POST". That breaks the admin
+// login (re-POSTs /admin -> "Cannot POST /admin") and causes an infinite redirect
+// loop after activation. Always redirecting to an ABSOLUTE url with 303
+// (See Other) keeps the browser switching to GET as intended.
+function redirect303(req, res, path) {
+  const host = req.get('host');
+  const proto = req.protocol || 'https';
+  return res.redirect(303, `${proto}://${host}${path}`);
+}
+
 // Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -111,7 +126,7 @@ app.get('/c/:cardId', async (req, res) => {
 
     // If card has not been claimed yet -> route to Activation Wizard
     if (card.status === 'unclaimed') {
-      return res.redirect(`/activate/${card.id}`);
+      return redirect303(req, res, `/activate/${card.id}`);
     }
 
     // If card is paused
@@ -206,7 +221,7 @@ app.get('/activate/:cardId', async (req, res) => {
       return res.status(404).send(views.renderStatusPage('Invalid Card', 'Card does not exist.', 'x-circle', 'red'));
     }
     if (card.status !== 'unclaimed') {
-      return res.redirect(`/manage/${card.id}`);
+      return redirect303(req, res, `/manage/${card.id}`);
     }
     res.send(views.renderActivationPage(card));
   } catch (err) {
@@ -221,7 +236,7 @@ app.post('/activate/:cardId', async (req, res) => {
     if (!card) return res.status(404).send('Card not found');
 
     if (card.status !== 'unclaimed') {
-      return res.redirect(`/manage/${card.id}`);
+      return redirect303(req, res, `/manage/${card.id}`);
     }
 
     const { redirect_type, target_url, password, name, title, company, phone, whatsapp, bio } = req.body;
@@ -250,7 +265,7 @@ app.post('/activate/:cardId', async (req, res) => {
     });
 
     req.session.cardId = card.id;
-    res.redirect(`/manage/${card.id}?activated=1`);
+    redirect303(req, res, `/manage/${card.id}?activated=1`);
   } catch (err) {
     console.error('Activation error:', err);
     res.status(500).send('Error during activation');
@@ -275,7 +290,7 @@ app.post('/login', async (req, res) => {
     }
 
     if (card.status === 'unclaimed') {
-      return res.redirect(`/activate/${card.id}`);
+      return redirect303(req, res, `/activate/${card.id}`);
     }
 
     const match = await bcrypt.compare(password, card.password_hash || '');
@@ -284,7 +299,7 @@ app.post('/login', async (req, res) => {
     }
 
     req.session.cardId = card.id;
-    res.redirect(`/manage/${card.id}`);
+    redirect303(req, res, `/manage/${card.id}`);
   } catch (err) {
     res.status(500).send('Login Error');
   }
@@ -292,7 +307,7 @@ app.post('/login', async (req, res) => {
 
 app.get('/logout', (req, res) => {
   req.session.cardId = null;
-  res.redirect('/');
+  redirect303(req, res, '/');
 });
 
 app.get('/manage/:cardId', async (req, res) => {
@@ -302,7 +317,7 @@ app.get('/manage/:cardId', async (req, res) => {
     if (!card) return res.status(404).send('Card not found');
 
     if (req.session.cardId !== card.id && !req.session.isAdmin) {
-      return res.redirect(`/login?cardId=${card.id}`);
+      return redirect303(req, res, `/login?cardId=${card.id}`);
     }
 
     const stats = await db.getCardStats(card.id);
@@ -350,7 +365,7 @@ app.post('/manage/:cardId', async (req, res) => {
         owner_email: email || card.owner_email
       });
 
-      return res.redirect(`/manage/${card.id}?updated=1`);
+      return redirect303(req, res, `/manage/${card.id}?updated=1`);
     }
 
     if (action === 'update_password') {
@@ -361,10 +376,10 @@ app.post('/manage/:cardId', async (req, res) => {
       }
       const hash = await bcrypt.hash(new_password, 10);
       await db.updateCardPassword(card.id, hash);
-      return res.redirect(`/manage/${card.id}?updated=1`);
+      return redirect303(req, res, `/manage/${card.id}?updated=1`);
     }
 
-    res.redirect(`/manage/${card.id}`);
+    redirect303(req, res, `/manage/${card.id}`);
   } catch (err) {
     res.status(500).send('Update error');
   }
@@ -385,7 +400,7 @@ app.get('/admin', async (req, res) => {
 app.post('/admin/login', (req, res) => {
   if (req.body.admin_key === config.adminKey) {
     req.session.isAdmin = true;
-    res.redirect('/admin');
+    redirect303(req, res, '/admin');
   } else {
     res.send(views.renderAdminLoginPage('Incorrect Admin Key.'));
   }
@@ -393,7 +408,7 @@ app.post('/admin/login', (req, res) => {
 
 app.get('/admin/logout', (req, res) => {
   req.session.isAdmin = false;
-  res.redirect('/admin');
+  redirect303(req, res, '/admin');
 });
 
 // Generate and instantly download print batch (.zip)
@@ -433,13 +448,13 @@ app.post('/admin/generate-batch', async (req, res) => {
 app.post('/admin/card/:id/reset', async (req, res) => {
   if (!req.session.isAdmin) return res.status(403).send('Unauthorized');
   await db.resetCard(req.params.id);
-  res.redirect('/admin?msg=Card+reset+to+unclaimed');
+  redirect303(req, res, '/admin?msg=Card+reset+to+unclaimed');
 });
 
 app.post('/admin/card/:id/delete', async (req, res) => {
   if (!req.session.isAdmin) return res.status(403).send('Unauthorized');
   await db.deleteCard(req.params.id);
-  res.redirect('/admin?msg=Card+deleted+successfully');
+  redirect303(req, res, '/admin?msg=Card+deleted+successfully');
 });
 
 // Start Server helper
