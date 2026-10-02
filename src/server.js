@@ -27,6 +27,16 @@ function redirect303(req, res, path) {
 // Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+// Dynamic pages must never be cached: otherwise a browser can keep showing a
+// stale page after a redirect (e.g. the activation form instead of the
+// "activated" confirmation on the manage page).
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  next();
+});
+
 app.use(express.static(path.join(__dirname, '../public')));
 
 app.use(cookieSession({
@@ -236,6 +246,7 @@ app.post('/activate/:cardId', async (req, res) => {
     if (!card) return res.status(404).send('Card not found');
 
     if (card.status !== 'unclaimed') {
+      req.session.flash = 'already';
       return redirect303(req, res, `/manage/${card.id}`);
     }
 
@@ -265,7 +276,8 @@ app.post('/activate/:cardId', async (req, res) => {
     });
 
     req.session.cardId = card.id;
-    redirect303(req, res, `/manage/${card.id}?activated=1`);
+    req.session.flash = 'activated';
+    redirect303(req, res, `/manage/${card.id}`);
   } catch (err) {
     console.error('Activation error:', err);
     res.status(500).send('Error during activation');
@@ -321,7 +333,15 @@ app.get('/manage/:cardId', async (req, res) => {
     }
 
     const stats = await db.getCardStats(card.id);
-    const message = req.query.activated ? '🎉 Your card has been activated successfully!' : (req.query.updated ? 'Changes saved successfully!' : null);
+    const flash = req.session.flash;
+    let message = null;
+    if (flash === 'activated') message = '🎉 Your card has been activated successfully!';
+    else if (flash === 'updated') message = 'Changes saved successfully!';
+    else if (flash === 'password') message = 'Password updated successfully!';
+    else if (flash === 'already') message = 'This card is already activated — update your details below.';
+    else if (req.query.activated) message = '🎉 Your card has been activated successfully!';
+    else if (req.query.updated) message = 'Changes saved successfully!';
+    req.session.flash = null;
 
     res.send(views.renderManagePage(card, stats, message));
   } catch (err) {
@@ -365,7 +385,8 @@ app.post('/manage/:cardId', async (req, res) => {
         owner_email: email || card.owner_email
       });
 
-      return redirect303(req, res, `/manage/${card.id}?updated=1`);
+      req.session.flash = 'updated';
+      return redirect303(req, res, `/manage/${card.id}`);
     }
 
     if (action === 'update_password') {
@@ -376,7 +397,8 @@ app.post('/manage/:cardId', async (req, res) => {
       }
       const hash = await bcrypt.hash(new_password, 10);
       await db.updateCardPassword(card.id, hash);
-      return redirect303(req, res, `/manage/${card.id}?updated=1`);
+      req.session.flash = 'password';
+      return redirect303(req, res, `/manage/${card.id}`);
     }
 
     redirect303(req, res, `/manage/${card.id}`);
