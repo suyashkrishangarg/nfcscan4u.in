@@ -50,6 +50,9 @@ function renderDesignerPage(sampleQrDataUrl) {
     .check-row input { accent-color: #6366f1; width: 15px; height: 15px; }
     #busyOverlay { position: fixed; inset: 0; z-index: 60; background: rgba(2,6,23,.82);
       backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; }
+    /* The ID rule above would otherwise beat Tailwind's .hidden (class-only)
+       and leave the overlay permanently on screen - this restores the toggle. */
+    #busyOverlay.hidden { display: none; }
     .spinner { width: 44px; height: 44px; border: 4px solid rgba(99,102,241,.25);
       border-top-color: #6366f1; border-radius: 50%; animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
