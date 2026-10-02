@@ -172,19 +172,22 @@ You bought the domain at GoDaddy, so you keep GoDaddy as your registrar and simp
 ### Step 1 — Add the domain in the host dashboard
 1. Open your project on Vercel → **Settings** → **Domains**.
 2. Add **`nfcscan4u.in`** and **`www.nfcscan4u.in`**.
-3. Vercel now shows the **exact DNS records** to create. Use the values from your own dashboard — they are the authoritative ones. Typically:
-   - **Apex** (`nfcscan4u.in`) → **A record** = `76.76.21.21`
+3. Vercel now shows the **exact DNS records** to create in the **domain card**. Always copy the values from your own card — they are the source of truth. Typically:
+   - **Apex** (`nfcscan4u.in`) → **A record** = `76.76.21.21` (general-purpose) *or* a project-specific anycast IP such as `216.198.79.1`. **Use whatever your domain card displays.**
    - **www** → **CNAME record** = the project's unique target shown by Vercel (e.g. `cname.vercel-dns.com`)
+
+> ⚠️ Vercel does **not** support IPv6 for custom domains added via a third-party DNS provider. Delete any **AAAA** records for `@`.
+> ⚠️ Vercel verifies the *exact* A record from your card. If it doesn't match, the domain stays "Invalid Configuration".
 
 ### Step 2 — Edit DNS in GoDaddy
 1. Sign in to GoDaddy → **My Products** → find `nfcscan4u.in` → **DNS** (Manage DNS).
-2. **Delete** any existing/conflicting default records for `@` (the GoDaddy parking A record) and `www`.
-3. **Add** these two records:
+2. **Delete ALL conflicting default records** for `@` and `www`. GoDaddy pre-creates a "parked" A record set (commonly `3.33.130.190`, `15.197.148.33`) and a `www` CNAME pointing back to the apex. These serve a GoDaddy "lander"/parking page and **must be removed**, or your domain will never reach Vercel.
+3. **Add** these records using the values from your Vercel domain card:
 
    | Type | Name | Value | TTL |
    | :--- | :--- | :--- | :--- |
-   | **A** | `@` | `76.76.21.21` | 1 hour (or default) |
-   | **CNAME** | `www` | `cname.vercel-dns.com` (use the value Vercel shows) | 1 hour (or default) |
+   | **A** | `@` | the A record from your Vercel card (e.g. `76.76.21.21` or `216.198.79.1`) | 1 hour (or default) |
+   | **CNAME** | `www` | the CNAME from your Vercel card (e.g. `cname.vercel-dns.com`) | 1 hour (or default) |
 
 4. Save the records.
 
@@ -192,6 +195,11 @@ You bought the domain at GoDaddy, so you keep GoDaddy as your registrar and simp
 - DNS propagation is usually minutes (up to ~24h worst case).
 - Back in Vercel → **Domains**, the status turns to **Valid Configuration** and a free SSL certificate is issued automatically (HTTPS).
 - Set your preferred primary domain — recommended: **`nfcscan4u.in`** (Vercel then 301-redirects `www` to it).
+
+### Troubleshooting the custom domain
+- **You see a GoDaddy "lander"/parking page instead of your app** → stale GoDaddy A records still exist. Delete every `@` A record that isn't the one from your Vercel domain card.
+- **`http://` works but `https://` fails / no certificate** → DNS is split between providers or contains AAAA/conflicting records. Remove them and wait for propagation; Vercel auto-issues SSL once DNS is clean.
+- **Status stays "Invalid Configuration"** → the A record value doesn't exactly match your Vercel domain card, or an AAAA record is present.
 
 ### Step 4 — Point the app at the domain
 Set the environment variable and redeploy so printed QR/NFC URLs use your real domain:
