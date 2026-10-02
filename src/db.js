@@ -64,6 +64,19 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_scans_card_id ON scans(card_id);
   `);
 
+  // Saved card designs used by the Admin Card Designer (front/back artwork
+  // with a QR placement recipe baked in).
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS designs (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      front_b64 TEXT,
+      back_b64 TEXT,
+      placement_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   await dropLegacyPinColumn();
 
   console.log('✅ Database schema initialized successfully');
@@ -246,6 +259,44 @@ async function getCardStats(id) {
   };
 }
 
+// ==========================================
+// Saved card designs (Admin Card Designer)
+// ==========================================
+// Images are stored as data URLs (base64). The client downscales uploads so a
+// design stays well under serverless request-body limits.
+async function saveDesign({ id, name, frontB64, backB64, placement }) {
+  await db.execute({
+    sql: `INSERT INTO designs (id, name, front_b64, back_b64, placement_json)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            front_b64 = excluded.front_b64,
+            back_b64 = excluded.back_b64,
+            placement_json = excluded.placement_json`,
+    args: [id, name || 'Untitled design', frontB64 || null, backB64 || null, JSON.stringify(placement || {})]
+  });
+  return getDesign(id);
+}
+
+async function getDesign(id) {
+  const res = await db.execute({
+    sql: 'SELECT * FROM designs WHERE id = ? LIMIT 1',
+    args: [String(id || '')]
+  });
+  const row = res.rows[0] || null;
+  if (!row) return null;
+  let placement = {};
+  try { placement = row.placement_json ? JSON.parse(row.placement_json) : {}; } catch (e) {}
+  return {
+    id: row.id,
+    name: row.name,
+    frontB64: row.front_b64,
+    backB64: row.back_b64,
+    placement,
+    createdAt: row.created_at
+  };
+}
+
 module.exports = {
   db,
   initDb,
@@ -260,5 +311,7 @@ module.exports = {
   deleteCard,
   recordScan,
   getAllCards,
-  getCardStats
+  getCardStats,
+  saveDesign,
+  getDesign
 };

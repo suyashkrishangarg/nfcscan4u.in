@@ -6,6 +6,8 @@ const config = require('./config');
 const db = require('./db');
 const generator = require('./generator');
 const views = require('./views');
+const designer = require('./designer');
+const compositor = require('./compositor');
 
 const app = express();
 
@@ -26,7 +28,9 @@ function redirect303(req, res, path) {
 
 // Middleware
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// Design uploads arrive as base64 JSON; the limit is generous for local runs.
+// (Vercel itself caps request bodies at ~4.5 MB - the client downscales to fit.)
+app.use(express.json({ limit: '8mb' }));
 
 // Dynamic pages must never be cached: otherwise a browser can keep showing a
 // stale page after a redirect (e.g. the activation form instead of the
@@ -464,6 +468,119 @@ app.post('/admin/generate-batch', async (req, res) => {
   } catch (err) {
     console.error('Batch generation error:', err);
     res.status(500).send('Failed to generate batch');
+  }
+});
+
+// ==========================================
+// 6b. CARD DESIGNER (artwork + QR placement -> ZIP)
+// ==========================================
+app.get('/admin/designer', async (req, res) => {
+  if (!req.session.isAdmin) return redirect303(req, res, '/admin');
+  try {
+    const sampleQr = await generator.generateQrDataUrl(
+      `${config.baseUrl.replace(/\/$/, '')}/c/SAMPLE`
+    );
+    res.send(designer.renderDesignerPage(sampleQr));
+  } catch (err) {
+    console.error('Designer page error:', err);
+    res.status(500).send('Failed to render the Card Designer');
+  }
+});
+
+// Save a design (artwork + placement recipe). Always creates a fresh id so a
+// new upload never overwrites a previously generated batch's artwork.
+app.post('/admin/designs', async (req, res) => {
+  if (!req.session.isAdmin) return res.status(403).json({ error: 'Unauthorized' });
+  try {
+    const { name, frontB64, backB64, placement } = req.body || {};
+    if (!frontB64 && !backB64) {
+      return res.status(400).json({ error: 'Upload at least one card side.' });
+    }
+    if (frontB64 && !compositor.isValidDataUrl(frontB64)) {
+      return res.status(400).json({ error: 'Front image is not a valid PNG/JPG.' });
+    }
+    if (backB64 && !compositor.isValidDataUrl(backB64)) {
+      return res.status(400).json({ error: 'Back image is not a valid PNG/JPG.' });
+    }
+    const id = generator.generateCardId(8, 'D-');
+    await db.saveDesign({
+      id,
+      name,
+      frontB64: frontB64 || null,
+      backB64: backB64 || null,
+      placement: compositor.normalizePlacement(placement)
+    });
+    res.json({ id });
+  } catch (err) {
+    console.error('Save design error:', err);
+    res.status(500).json({ error: 'Failed to save design' });
+  }
+});
+
+// Fetch a saved design (used to restore the editor after a refresh).
+app.get('/admin/designs/:id', async (req, res) => {
+  if (!req.session.isAdmin) return res.status(403).json({ error: 'Unauthorized' });
+  try {
+    const design = await db.getDesign(req.params.id);
+    if (!design) return res.status(404).json({ error: 'Design not found' });
+    res.json(design);
+  } catch (err) {
+    console.error('Get design error:', err);
+    res.status(500).json({ error: 'Failed to load design' });
+  }
+});
+
+// Generate the batch: fresh card IDs in the DB, QR codes composited into the
+// artwork, ZIP streamed back as the download.
+app.post('/admin/generate-design', async (req, res) => {
+  if (!req.session.isAdmin) return res.status(403).json({ error: 'Unauthorized' });
+
+  try {
+    const { designId, quantity, prefix, length, qr, placement } = req.body || {};
+
+    const design = await db.getDesign(designId);
+    if (!design) {
+      return res.status(400).json({ error: 'Design not found - upload your artwork again.' });
+    }
+
+    const qty = Math.min(Math.max(parseInt(quantity, 10) || 10, 1), 500);
+    const codeLength = Math.min(Math.max(parseInt(length, 10) || 6, 4), 10);
+    const codePrefix = String(prefix || '').trim().toUpperCase().slice(0, 20);
+    const normPlacement = compositor.normalizePlacement(placement);
+    const qrSides = {
+      front: Boolean(qr && qr.front) && Boolean(design.frontB64),
+      back: Boolean(qr && qr.back) && Boolean(design.backB64)
+    };
+    if (!qrSides.front && !qrSides.back) {
+      return res.status(400).json({ error: 'Enable the QR code on at least one side that has artwork.' });
+    }
+
+    const newCards = [];
+    for (let i = 0; i < qty; i++) {
+      newCards.push({ id: generator.generateCardId(codeLength, codePrefix) });
+    }
+    await db.createBatch(newCards);
+
+    const archive = generator.createDesignZip(newCards, design, normPlacement, qrSides, config.baseUrl);
+    const filename = `opentap_design_batch_${qty}_cards_${Date.now()}.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    archive.on('error', (err) => {
+      console.error('Archive error:', err);
+      if (res.headersSent) res.destroy(err);
+      else res.status(500).json({ error: 'Failed to build the ZIP' });
+    });
+    // Pipe FIRST, then append composited images so they stream out instead of
+    // piling up in memory for large batches.
+    archive.pipe(res);
+    await generator.appendDesignZipCards(archive, newCards, design, normPlacement, qrSides, config.baseUrl);
+    await archive.finalize();
+  } catch (err) {
+    console.error('Design batch generation error:', err);
+    if (res.headersSent) return res.end();
+    res.status(500).json({ error: 'Failed to generate batch' });
   }
 });
 

@@ -37,6 +37,11 @@ Print high-resolution vector QR codes and program NFC chips **once**. Assign, re
   - Exports **300+ DPI PNGs** (for Canva, Photoshop, or direct printing).
   - Exports **CSV sheet** of Card IDs and NFC payload URLs.
   - Generates single downloadable `.zip` file from the web UI or CLI.
+- **Card Designer (Artwork + QR Baked In)**:
+  - Upload your front & back card artwork in the Admin Portal.
+  - Enable the QR code on one or both sides.
+  - Interactive placement: drag the QR on the card, adjust size and rotation (orientation) on a live canvas.
+  - Exports a ZIP of print-ready card images with each card's unique QR composited in, plus CSV + NFC instructions.
 - **2 Operation Modes per Card**:
   1. **Direct Redirect**: Instantly forwards scanner to any URL (LinkedIn, Instagram, WhatsApp, portfolio, Google Review, Linktree, etc.).
   2. **Digital Business Card**: Displays a mobile contact profile with Avatar, Bio, Social links, and a **"Save to Contacts" (.vcf)** button.
@@ -86,6 +91,32 @@ npm run generate -- --count 50 --prefix CARD-
 ```
 
 All vector SVGs, high-res PNGs, and the CSV file will be exported directly into an `output/batch_<timestamp>/` folder.
+
+---
+
+## 🎴 Card Designer — Full Card Artwork with the QR Composited In
+
+Besides the QR-only batch, the Admin Portal has a **Card Designer** at `/admin/designer`:
+
+1. **Upload artwork** — front and/or back of your card (PNG/JPG, auto-downscaled for fast generation).
+2. **Enable the QR code** on one or both sides.
+3. **Place the QR interactively** — drag it on the card preview and adjust *size* and *rotation* (orientation) with sliders; 0°/90°/180° presets included.
+4. **Set the quantity** (and optional code prefix/length) and click **Generate & Download ZIP**.
+
+The generated ZIP contains:
+
+```
+cards/<CARD-ID>_front.*   # full artwork with that card's unique QR baked in
+cards/<CARD-ID>_back.*    # (only for sides that have a QR enabled)
+common_front.*            # sides WITHOUT a QR: identical for every card, print once
+common_back.*
+batch_cards_list.csv      # card IDs + URLs for NFC encoding
+PRINT_AND_NFC_INSTRUCTIONS.txt
+```
+
+Your uploaded design and QR placement are saved server-side, so you can come back later (even after a page refresh) and generate another batch without re-uploading.
+
+> **Large batches:** hosted Vercel functions are capped at 60 seconds, so batches above ~100 cards are safest generated locally with `npm start`, where there is no time limit.
 
 ---
 

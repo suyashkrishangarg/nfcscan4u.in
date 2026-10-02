@@ -107,10 +107,121 @@ NFC & DYNAMIC QR CARDS - PRINT & ENCODING INSTRUCTIONS
   return archive;
 }
 
+// Build a ZIP of print-ready card artwork from an Admin Card Designer batch.
+// Each card on a QR-enabled side gets its own composited image with a unique
+// QR baked in; sides without a QR are stored once (common_<side>.<ext>)
+// because every card would otherwise carry an identical copy.
+//
+// This part is cheap (CSV + instructions + validation) and runs BEFORE the
+// response is piped; call `appendDesignZipCards` after piping so composited
+// images stream out instead of piling up in memory.
+function createDesignZip(cards, design, placement, qrSides, baseUrl = config.baseUrl) {
+  const archiver = require('archiver'); // lazy: never breaks unrelated cold starts
+  const compositor = require('./compositor');
+  const archive = archiver('zip', { zlib: { level: 9 } });
+
+  const base = String(baseUrl || '').replace(/\/$/, '');
+
+  // Card list CSV (shared by print + NFC encoding workflows)
+  let csvContent = 'Card ID,Card URL,NFC Payload,Status\r\n';
+  cards.forEach(card => {
+    const cardUrl = `${base}/c/${card.id}`;
+    csvContent += `"${card.id}","${cardUrl}","${cardUrl}","unclaimed"\r\n`;
+  });
+  archive.append(csvContent, { name: 'batch_cards_list.csv' });
+
+  // Fail fast (before headers are sent) if an artwork data URL is invalid.
+  const sides = [
+    { key: 'front', b64: design.frontB64, qr: Boolean(qrSides.front) },
+    { key: 'back', b64: design.backB64, qr: Boolean(qrSides.back) }
+  ].filter(s => s.b64);
+  for (const s of sides) {
+    if (!compositor.decodeDataUrl(s.b64)) throw new Error(`Design ${s.key} image is invalid`);
+  }
+
+  const instructions = `=====================================================
+NFC & DYNAMIC QR CARDS - PRINT & NFC ENCODING INSTRUCTIONS
+(DESIGN BATCH - artwork with QR codes baked in)
+=====================================================
+
+ZIP CONTENTS:
+  cards/<CARD-ID>_front.* / cards/<CARD-ID>_back.*
+      Print-ready card artwork with that card's unique QR code composited in
+      at the placement you configured in the Card Designer. One file per card,
+      for each side that has a QR code enabled.
+  common_front.* / common_back.*
+      Side WITHOUT a QR code (if any). Identical for every card in the batch -
+      print it once for all cards.
+  batch_cards_list.csv
+      Card ID + URL for every card in this batch.
+
+1. PRINTING:
+   - Print at 300 DPI. Standard card size: 3.375" x 2.125" (85.6 x 54 mm),
+     add 3mm bleed as required by your printer.
+   - Front and back files share the same CARD ID in their file names, so they
+     are easy to pair up during imposition.
+   - Recommended minimum QR print size: 15mm x 15mm (0.6" x 0.6").
+
+2. ENCODING THE NFC CHIP:
+   - Target Chips: NTAG213, NTAG215, or NTAG216.
+   - Use any free smartphone app (e.g. 'NFC Tools' on iOS / Android) or a
+     desktop USB NFC writer (ACR122U).
+   - Write Record: Type 'URL' / 'URI'.
+   - Value: The URL for each card from 'batch_cards_list.csv'.
+   - The QR code and the NFC chip must point to the EXACT same URL!
+
+3. ACTIVATION & CLAIMING:
+   - No PIN is required. On the first tap or scan the cardholder simply picks a
+     destination link (or digital profile) and sets a management password.
+=====================================================
+`;
+  archive.append(instructions, { name: 'PRINT_AND_NFC_INSTRUCTIONS.txt' });
+
+  return archive;
+}
+
+// Heavy part of the design ZIP: composite each card's QR into the artwork and
+// append the images. Call this AFTER the response has been piped so composited
+// images stream out instead of accumulating in memory.
+async function appendDesignZipCards(archive, cards, design, placement, qrSides, baseUrl = config.baseUrl) {
+  const compositor = require('./compositor');
+  const base = String(baseUrl || '').replace(/\/$/, '');
+  const normPlacement = compositor.normalizePlacement(placement);
+
+  const sides = [
+    { key: 'front', b64: design.frontB64, qr: Boolean(qrSides.front) },
+    { key: 'back', b64: design.backB64, qr: Boolean(qrSides.back) }
+  ].filter(s => s.b64);
+  const decoded = sides.map(s => ({ ...s, buffer: compositor.decodeDataUrl(s.b64).buffer }));
+
+  // Per-card composited images for the QR-enabled sides
+  for (const s of decoded) {
+    if (!s.qr) continue;
+    for (const card of cards) {
+      const url = `${base}/c/${card.id}`;
+      const out = await compositor.renderCardSide({
+        imageBuffer: s.buffer,
+        url,
+        placement: normPlacement[s.key]
+      });
+      archive.append(out.buffer, { name: `cards/${card.id}_${s.key}.${out.ext}` });
+    }
+  }
+
+  // QR-less sides: one shared copy for the whole batch
+  for (const s of decoded) {
+    if (s.qr) continue;
+    const out = await compositor.passthroughSide(s.buffer);
+    archive.append(out.buffer, { name: `common_${s.key}.${out.ext}` });
+  }
+}
+
 module.exports = {
   generateCardId,
   generateQrSvg,
   generateQrPngBuffer,
   generateQrDataUrl,
-  createBatchZip
+  createBatchZip,
+  createDesignZip,
+  appendDesignZipCards
 };
