@@ -224,12 +224,7 @@ app.post('/activate/:cardId', async (req, res) => {
       return res.redirect(`/manage/${card.id}`);
     }
 
-    const { pin, redirect_type, target_url, password, name, title, company, phone, whatsapp, bio } = req.body;
-
-    // Verify PIN
-    if (String(pin).trim() !== String(card.pin).trim()) {
-      return res.send(views.renderActivationPage(card, 'Incorrect Activation PIN. Please check the code printed with your card.'));
-    }
+    const { redirect_type, target_url, password, name, title, company, phone, whatsapp, bio } = req.body;
 
     if (!password || password.length < 4) {
       return res.send(views.renderActivationPage(card, 'Password must be at least 4 characters.'));
@@ -413,8 +408,7 @@ app.post('/admin/generate-batch', async (req, res) => {
     const newCards = [];
     for (let i = 0; i < quantity; i++) {
       newCards.push({
-        id: generator.generateCardId(length, prefix),
-        pin: generator.generatePin()
+        id: generator.generateCardId(length, prefix)
       });
     }
 

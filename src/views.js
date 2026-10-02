@@ -140,7 +140,7 @@ function renderActivationPage(card, error = null) {
           Ready to Claim
         </div>
         <h1 class="text-2xl sm:text-3xl font-bold text-white tracking-tight">Activate Your Card</h1>
-        <p class="text-sm text-slate-400 mt-1">Connect this physical card to your profile or custom link</p>
+        <p class="text-sm text-slate-400 mt-1">No PIN needed &mdash; pick where your card should go and set a password</p>
         <p class="text-xs font-mono text-indigo-400 mt-2 bg-indigo-950/40 inline-block px-2.5 py-1 rounded-md border border-indigo-900/50">Card ID: #${card.id}</p>
       </div>
 
@@ -153,17 +153,7 @@ function renderActivationPage(card, error = null) {
 
       <form action="/activate/${card.id}" method="POST" class="space-y-5" id="activateForm">
         
-        <!-- PIN Verification -->
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-            Card Activation PIN <span class="text-red-400">*</span>
-          </label>
-          <input type="text" name="pin" required placeholder="4-digit PIN (from packaging)" maxlength="6"
-            class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-mono tracking-widest text-center text-lg">
-          <p class="text-[11px] text-slate-500 mt-1 text-center">Printed on your card sleeve or welcome insert</p>
-        </div>
-
-        <div class="border-t border-slate-800 pt-4">
+        <div class="pt-4">
           <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
             Choose What Happens When Tapped / Scanned
           </label>
@@ -584,7 +574,7 @@ function renderAdminDashboard(cards, baseUrl, message = null, error = null) {
         <h2 class="text-lg font-bold text-white">Generate Print-Ready QR Batch</h2>
       </div>
       <p class="text-xs text-slate-400 mb-5">
-        Generates unique IDs, secure PINs, vector SVGs, 300 DPI PNGs, and a CSV file packed in a single ZIP for your print manufacturer.
+        Generates unique card IDs, vector SVGs, 300 DPI PNGs, and a CSV file packed in a single ZIP for your print manufacturer.
       </p>
 
       <form action="/admin/generate-batch" method="POST" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
@@ -624,7 +614,6 @@ function renderAdminDashboard(cards, baseUrl, message = null, error = null) {
           <thead class="bg-slate-950/60 text-slate-400 uppercase tracking-wider border-b border-slate-800 font-semibold">
             <tr>
               <th class="p-3.5 pl-5">Card ID</th>
-              <th class="p-3.5">PIN</th>
               <th class="p-3.5">Status</th>
               <th class="p-3.5">Destination / Mode</th>
               <th class="p-3.5">Scans</th>
@@ -635,14 +624,13 @@ function renderAdminDashboard(cards, baseUrl, message = null, error = null) {
           <tbody class="divide-y divide-slate-800/60 text-slate-300">
             ${cards.length === 0 ? `
               <tr>
-                <td colspan="7" class="p-8 text-center text-slate-500">
+                <td colspan="6" class="p-8 text-center text-slate-500">
                   No cards found. Use the generator above to create your first batch!
                 </td>
               </tr>
             ` : cards.map(c => `
               <tr class="hover:bg-slate-800/40 transition">
                 <td class="p-3.5 pl-5 font-mono font-bold text-indigo-400">#${c.id}</td>
-                <td class="p-3.5 font-mono text-slate-400">${c.pin}</td>
                 <td class="p-3.5">
                   <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                     c.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :

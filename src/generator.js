@@ -14,11 +14,6 @@ function generateCardId(length = 6, prefix = '') {
   return prefix ? `${prefix}${result}` : result;
 }
 
-// Generate 4-digit activation PIN
-function generatePin() {
-  return String(Math.floor(1000 + Math.random() * 9000));
-}
-
 // Generate QR code SVG string
 async function generateQrSvg(url) {
   return QRCode.toString(url, {
@@ -60,10 +55,10 @@ async function createBatchZip(cards, baseUrl = config.baseUrl) {
   const archive = archiver('zip', { zlib: { level: 9 } });
 
   // Generate CSV content
-  let csvContent = 'Card ID,Activation PIN,Card URL,NFC Payload,Status\r\n';
+  let csvContent = 'Card ID,Card URL,NFC Payload,Status\r\n';
   cards.forEach(card => {
     const cardUrl = `${baseUrl.replace(/\/$/, '')}/c/${card.id}`;
-    csvContent += `"${card.id}","${card.pin}","${cardUrl}","${cardUrl}","unclaimed"\r\n`;
+    csvContent += `"${card.id}","${cardUrl}","${cardUrl}","unclaimed"\r\n`;
   });
 
   archive.append(csvContent, { name: 'batch_cards_list.csv' });
@@ -89,8 +84,8 @@ NFC & DYNAMIC QR CARDS - PRINT & ENCODING INSTRUCTIONS
    - Both the QR code and the NFC chip must point to the EXACT same URL!
 
 3. ACTIVATION & CLAIMING:
-   - Supply the 4-digit Activation PIN to the cardholder (printed on card packaging, sleeve, or insert).
-   - When the user first taps or scans the card, they will be prompted to activate it.
+   - No PIN is required. On the first tap or scan the cardholder simply picks a
+     destination link (or digital profile) and sets a management password.
 =====================================================
 `;
   archive.append(instructions, { name: 'PRINT_AND_NFC_INSTRUCTIONS.txt' });
@@ -113,7 +108,6 @@ NFC & DYNAMIC QR CARDS - PRINT & ENCODING INSTRUCTIONS
 
 module.exports = {
   generateCardId,
-  generatePin,
   generateQrSvg,
   generateQrPngBuffer,
   generateQrDataUrl,

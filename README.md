@@ -21,10 +21,10 @@ Print high-resolution vector QR codes and program NFC chips **once**. Assign, re
         ┌────────────────┴────────────────┐
         ▼                                 ▼
    [Unclaimed]                       [Active]
-  Friendly Setup Wizard             Instant HTTP 302 Redirect
-  - Enter Activation PIN            (Or Rich Digital Business Card
-  - Enter Target URL / Profile         with .vcf Contact Download)
-  - Set Password to edit later
+  One-Tap Claim Wizard             Instant HTTP 302 Redirect
+  - Pick Target URL / Profile       (Or Rich Digital Business Card
+  - Set Password to edit later         with .vcf Contact Download)
+  (No PIN required)
 ```
 
 ---
@@ -35,7 +35,7 @@ Print high-resolution vector QR codes and program NFC chips **once**. Assign, re
 - **Batch Print Generator**:
   - Exports **Vector SVGs** (crisp at any size, perfect for Adobe Illustrator, Figma, CorelDraw).
   - Exports **300+ DPI PNGs** (for Canva, Photoshop, or direct printing).
-  - Exports **CSV sheet** of Card IDs, Activation PINs, and NFC payload URLs.
+  - Exports **CSV sheet** of Card IDs and NFC payload URLs.
   - Generates single downloadable `.zip` file from the web UI or CLI.
 - **2 Operation Modes per Card**:
   1. **Direct Redirect**: Instantly forwards scanner to any URL (LinkedIn, Instagram, WhatsApp, portfolio, Google Review, Linktree, etc.).
@@ -94,7 +94,8 @@ All vector SVGs, high-res PNGs, and the CSV file will be exported directly into 
 1. **Printing the Cards**:
    - Provide the generated `.svg` files (from the `qr_svg` folder) to your card printing vendor.
    - Recommended minimum print size: **15mm x 15mm** (0.6" x 0.6").
-   - Print the matching 4-digit **Activation PIN** on the card's paper sleeve, welcome letter, or packaging.
+   - No PIN is printed anymore — simply hand the finished card to its owner. The
+     owner claims it on the very first tap/scan by setting a destination and a password.
 
 2. **Encoding the Blank NFC Chips (NTAG213 / 215 / 216)**:
    - Use the free **NFC Tools** app (available on iOS App Store & Google Play).
@@ -132,12 +133,16 @@ All vector SVGs, high-res PNGs, and the CSV file will be exported directly into 
    - Push your code to GitHub.
    - Import the repository in [Vercel](https://vercel.com).
    - In **Environment Variables**, add:
-     - `BASE_URL`: `https://your-project.vercel.app` (or your custom domain)
+     - `BASE_URL`: `https://nfcscan4u.in`
      - `DATABASE_URL`: `libsql://your-db-name.turso.io`
      - `DATABASE_AUTH_TOKEN`: `your-turso-token`
      - `ADMIN_KEY`: `your_secure_admin_password`
      - `SESSION_SECRET`: `any-long-random-string`
    - Click **Deploy**.
+   - Then connect your GoDaddy domain (see the **Custom Domain** section below).
+   - This repo already ships `api/index.js` (a Vercel Function that re-exports the Express app) plus a rewrite in `vercel.json`, so no build command or framework preset is needed.
+   - ⚠️ **Local SQLite does not persist on Vercel** — you must set `DATABASE_URL` to your Turso URL or your data resets on every deploy.
+   - ⚠️ Large print batches are best generated locally (`npm run generate`) rather than in the serverless function.
 
 ---
 
@@ -151,7 +156,7 @@ All vector SVGs, high-res PNGs, and the CSV file will be exported directly into 
    - **Build Command**: `npm install`
    - **Start Command**: `node src/server.js`
 5. Under **Environment Variables**, add:
-   - `BASE_URL`: `https://your-service.onrender.com`
+   - `BASE_URL`: `https://nfcscan4u.in`
    - `DATABASE_URL`: `libsql://your-db.turso.io` (Recommended) or leave default for local disk
    - `DATABASE_AUTH_TOKEN`: `your-turso-token`
    - `ADMIN_KEY`: `your_admin_password`
@@ -160,8 +165,46 @@ All vector SVGs, high-res PNGs, and the CSV file will be exported directly into 
 
 ---
 
+## 🌐 Connecting Your GoDaddy Domain (`nfcscan4u.in`)
+
+You bought the domain at GoDaddy, so you keep GoDaddy as your registrar and simply point its DNS records at your free host (Vercel shown here; Render works the same way).
+
+### Step 1 — Add the domain in the host dashboard
+1. Open your project on Vercel → **Settings** → **Domains**.
+2. Add **`nfcscan4u.in`** and **`www.nfcscan4u.in`**.
+3. Vercel now shows the **exact DNS records** to create. Use the values from your own dashboard — they are the authoritative ones. Typically:
+   - **Apex** (`nfcscan4u.in`) → **A record** = `76.76.21.21`
+   - **www** → **CNAME record** = the project's unique target shown by Vercel (e.g. `cname.vercel-dns.com`)
+
+### Step 2 — Edit DNS in GoDaddy
+1. Sign in to GoDaddy → **My Products** → find `nfcscan4u.in` → **DNS** (Manage DNS).
+2. **Delete** any existing/conflicting default records for `@` (the GoDaddy parking A record) and `www`.
+3. **Add** these two records:
+
+   | Type | Name | Value | TTL |
+   | :--- | :--- | :--- | :--- |
+   | **A** | `@` | `76.76.21.21` | 1 hour (or default) |
+   | **CNAME** | `www` | `cname.vercel-dns.com` (use the value Vercel shows) | 1 hour (or default) |
+
+4. Save the records.
+
+### Step 3 — Wait & verify
+- DNS propagation is usually minutes (up to ~24h worst case).
+- Back in Vercel → **Domains**, the status turns to **Valid Configuration** and a free SSL certificate is issued automatically (HTTPS).
+- Set your preferred primary domain — recommended: **`nfcscan4u.in`** (Vercel then 301-redirects `www` to it).
+
+### Step 4 — Point the app at the domain
+Set the environment variable and redeploy so printed QR/NFC URLs use your real domain:
+```
+BASE_URL=https://nfcscan4u.in
+```
+> ⚠️ **Important:** the card URL baked into every QR code and NFC chip is `BASE_URL + /c/<CardID>`. Generate your batches **after** setting `BASE_URL=https://nfcscan4u.in`, otherwise the printed cards will point at `localhost` or the temporary `*.vercel.app` URL.
+
+---
+
 ## 🔒 Security Best Practices
 
-- **Activation PIN**: Prevents anyone scanning a card in transit from claiming it before the legitimate buyer opens it.
-- **Card Password**: Set by the owner during activation, required to edit destination links in `/manage/:cardId`.
-- **Passlib/Bcrypt**: All passwords securely hashed with bcrypt.
+- **No Activation PIN**: Claiming happens in a single tap for maximum convenience. Whoever first taps an unclaimed card sets its destination and password — so distribute blank cards directly to their intended owners and avoid leaving unclaimed cards in public places.
+- **Card Password**: Set by the owner during claiming, required to edit destination links in `/manage/:cardId`.
+- **Bcrypt**: All passwords are securely hashed with bcrypt.
+- **Admin Key**: Required to access `/admin`. Always set a long random `ADMIN_KEY` in production and never keep the default.

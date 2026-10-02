@@ -46,15 +46,14 @@ async function runCli() {
   fs.mkdirSync(pngDir, { recursive: true });
 
   const cards = [];
-  let csvContent = 'Card ID,Activation PIN,Card URL,NFC Payload,Status\r\n';
+  let csvContent = 'Card ID,Card URL,NFC Payload,Status\r\n';
 
   for (let i = 0; i < count; i++) {
     const cardId = generator.generateCardId(length, prefix);
-    const pin = generator.generatePin();
     const cardUrl = `${baseUrl.replace(/\/$/, '')}/c/${cardId}`;
 
-    cards.push({ id: cardId, pin });
-    csvContent += `"${cardId}","${pin}","${cardUrl}","${cardUrl}","unclaimed"\r\n`;
+    cards.push({ id: cardId });
+    csvContent += `"${cardId}","${cardUrl}","${cardUrl}","unclaimed"\r\n`;
 
     // Write vector SVG
     const svg = await generator.generateQrSvg(cardUrl);
@@ -89,8 +88,8 @@ NFC & DYNAMIC QR CARDS - PRINT & ENCODING INSTRUCTIONS
    - Enter the Card URL from 'batch_cards_list.csv'.
 
 3. ACTIVATION:
-   - Provide the 4-digit Activation PIN to the cardholder.
-   - First tap/scan will automatically guide them to activate their card!
+   - No PIN required. The first tap/scan opens the claim page where the
+     cardholder picks a destination and sets a management password.
 `;
   fs.writeFileSync(path.join(outputDir, 'PRINT_INSTRUCTIONS.txt'), instructions);
 

@@ -10,7 +10,6 @@ async function initDb() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS cards (
       id TEXT PRIMARY KEY,
-      pin TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'unclaimed',
       owner_name TEXT,
       owner_email TEXT,
@@ -38,7 +37,24 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_scans_card_id ON scans(card_id);
   `);
 
+  await dropLegacyPinColumn();
+
   console.log('✅ Database schema initialized successfully');
+}
+
+// Legacy databases created before the activation PIN was removed still have a
+// NOT NULL `pin` column. Drop it so a card can be claimed with a single tap.
+async function dropLegacyPinColumn() {
+  try {
+    const info = await db.execute('PRAGMA table_info(cards)');
+    const hasPin = info.rows.some(r => r.name === 'pin');
+    if (hasPin) {
+      await db.execute('ALTER TABLE cards DROP COLUMN pin');
+      console.log('ℹ️  Removed legacy activation PIN column');
+    }
+  } catch (err) {
+    console.warn('PIN column migration skipped:', err.message);
+  }
 }
 
 async function getCard(id) {
@@ -50,18 +66,18 @@ async function getCard(id) {
   return res.rows[0] || null;
 }
 
-async function createCard({ id, pin }) {
+async function createCard({ id }) {
   await db.execute({
-    sql: 'INSERT INTO cards (id, pin, status) VALUES (?, ?, ?)',
-    args: [id, pin, 'unclaimed']
+    sql: 'INSERT INTO cards (id, status) VALUES (?, ?)',
+    args: [id, 'unclaimed']
   });
   return getCard(id);
 }
 
 async function createBatch(cards) {
   const statements = cards.map(c => ({
-    sql: 'INSERT OR IGNORE INTO cards (id, pin, status) VALUES (?, ?, ?)',
-    args: [c.id, c.pin, 'unclaimed']
+    sql: 'INSERT OR IGNORE INTO cards (id, status) VALUES (?, ?)',
+    args: [c.id, 'unclaimed']
   }));
   await db.batch(statements);
 }
