@@ -1,29 +1,22 @@
 {
-  "name": "opentap-nfc-cards",
+  "name": "nfc-card",
   "version": "1.0.0",
-  "description": "Open-Source Dynamic NFC and QR Card Management Platform",
-  "main": "src/server.js",
+  "description": "",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "generate": "node src/cli.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [
-    "nfc",
-    "qr-code",
-    "digital-business-card",
-    "smart-card",
-    "dynamic-redirect"
-  ],
+  "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
-    "@libsql/client": "^0.14.0",
-    "archiver": "^7.0.1",
-    "bcryptjs": "^3.0.2",
-    "cookie-session": "^2.1.0",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "@libsql/client": "^0.18.0",
+    "archiver": "^8.0.0",
+    "bcryptjs": "^3.0.3",
+    "cookie-session": "^2.1.1",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1",
     "qrcode": "^1.5.4"
   }
 }
