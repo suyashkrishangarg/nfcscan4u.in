@@ -561,6 +561,18 @@ app.post('/admin/generate-design', async (req, res) => {
     }
     await db.createBatch(newCards);
 
+    // Preflight: render one card BEFORE sending ZIP headers so a broken
+    // compositor/artwork fails as clean JSON instead of a corrupt download.
+    {
+      const side = qrSides.front ? 'front' : 'back';
+      const art = qrSides.front ? design.frontB64 : design.backB64;
+      await compositor.renderCardSide({
+        imageBuffer: compositor.decodeDataUrl(art).buffer,
+        url: `${config.baseUrl.replace(/\/$/, '')}/c/${newCards[0].id}`,
+        placement: normPlacement[side]
+      });
+    }
+
     const archive = generator.createDesignZip(newCards, design, normPlacement, qrSides, config.baseUrl);
     const filename = `opentap_design_batch_${qty}_cards_${Date.now()}.zip`;
 
