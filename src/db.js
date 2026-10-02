@@ -6,11 +6,15 @@ const config = require('./config');
 // function to fail to load. A local `file:` database keeps using the native
 // client so zero-configuration local development still works.
 const isRemote = /^(libsql|https?|wss?):/i.test(config.dbUrl || '');
+// Vercel (and Lambda-style) runtimes cannot load the native `libsql` binary.
+const onServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 let client = null;
 function getClient() {
   if (!client) {
-    const { createClient } = isRemote
+    // Locally a `file:` database uses the native client (zero-config dev).
+    // Everywhere else the pure-JS HTTP client is used.
+    const { createClient } = (onServerless || isRemote)
       ? require('@libsql/client/web')
       : require('@libsql/client');
     client = createClient({ url: config.dbUrl, authToken: config.dbAuthToken });
