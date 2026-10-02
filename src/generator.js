@@ -1,5 +1,4 @@
 const QRCode = require('qrcode');
-const archiver = require('archiver');
 const crypto = require('crypto');
 const config = require('./config');
 
@@ -52,6 +51,8 @@ async function generateQrDataUrl(url) {
 
 // Build a ZIP archive of a batch of cards
 async function createBatchZip(cards, baseUrl = config.baseUrl) {
+  // Loaded lazily so a problematic archiver can never break a function cold start.
+  const archiver = require('archiver');
   const archive = archiver('zip', { zlib: { level: 9 } });
 
   // Generate CSV content
