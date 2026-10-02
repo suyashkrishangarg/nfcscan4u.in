@@ -1,9 +1,32 @@
-const { createClient } = require('@libsql/client');
 const config = require('./config');
 
-const db = createClient({
-  url: config.dbUrl,
-  authToken: config.dbAuthToken
+// Remote libSQL / Turso databases are served by the pure-JavaScript HTTP client,
+// which has no native bindings. This is required on serverless hosts such as
+// Vercel, where the native `libsql` binary is unavailable and causes the
+// function to fail to load. A local `file:` database keeps using the native
+// client so zero-configuration local development still works.
+const isRemote = /^(libsql|https?|wss?):/i.test(config.dbUrl || '');
+
+let client = null;
+function getClient() {
+  if (!client) {
+    const { createClient } = isRemote
+      ? require('@libsql/client/web')
+      : require('@libsql/client');
+    client = createClient({ url: config.dbUrl, authToken: config.dbAuthToken });
+  }
+  return client;
+}
+
+// Lazily forwards calls to the real client so merely importing this module never
+// opens a connection. Avoids touching the database (and its native bindings) at
+// module load time on serverless platforms.
+const db = new Proxy({}, {
+  get(_target, prop) {
+    const c = getClient();
+    const value = c[prop];
+    return typeof value === 'function' ? value.bind(c) : value;
+  }
 });
 
 async function initDb() {
