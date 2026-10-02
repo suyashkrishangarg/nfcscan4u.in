@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: opentap-nfc-cards
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ADMIN_KEY
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true

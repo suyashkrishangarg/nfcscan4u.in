@@ -1,0 +1,7 @@
+node_modules/
+.env
+cards.db
+cards.db-*
+*.log
+output/
+.DS_Store
